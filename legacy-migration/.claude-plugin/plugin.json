@@ -1,0 +1,20 @@
+{
+  "name": "legacy-migration",
+  "description": "智能代码迁移助手，支持一键启动、智能问答交互、增量操作和状态恢复的现代化迁移工具",
+  "version": "3.2.0-context-optimized",
+  "author": {
+    "name": "Claude Code Plugin",
+    "email": "support@anthropic.com"
+  },
+  "commands": [
+    "./commands/detect-project.md",
+    "./commands/analyze.md",
+    "./commands/refactor.md",
+    "./commands/upgrade.md",
+    "./commands/transpile.md",
+    "./commands/migrate.md",
+    "./commands/plan.md",
+    "./commands/validate.md",
+    "./commands/start-migration.md"
+  ]
+}

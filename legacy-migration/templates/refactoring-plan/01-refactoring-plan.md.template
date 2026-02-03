@@ -1,0 +1,332 @@
+# {{title}}
+
+## 📋 元信息 (Metadata)
+
+| 字段 | 值 |
+|------|-----|
+| **计划ID** | {{plan_id}} |
+| **创建时间** | {{created_at}} |
+| **作者** | {{author}} |
+| **关联工单** | {{ticket_id}} |
+| **目标代码** | {{target_path}} |
+| **重构类型** | {{plan_type}} |
+| **版本** | {{version}} |
+
+---
+
+## 🎯 执行摘要 (Executive Summary)
+
+### 重构概述
+- **需要重构的文件数**: {{total_files}}
+- **预计工作量**: {{estimated_effort}}
+- **风险等级**: {{risk_level}}
+- **影响程度**: {{impact_level}}
+
+### 质量改进预期
+| 指标 | 当前值 | 目标值 | 改进幅度 |
+|------|--------|--------|----------|
+| 圈复杂度 | {{current_complexity}} | {{target_complexity}} | {{complexity_improvement}} |
+| 代码重复率 | {{current_duplication}}% | {{target_duplication}}% | {{duplication_improvement}} |
+| 测试覆盖率 | {{current_coverage}}% | {{target_coverage}}% | {{coverage_improvement}} |
+| 技术债务 | {{current_debt}} | {{target_debt}} | {{debt_reduction}} |
+
+---
+
+## 🎯 重构目标 (Refactoring Objectives)
+
+{{#each objective}}
+### {{@index}}. {{title}}
+**目标文件**: {{target_file}}
+**原因**: {{reason}}
+**预期收益**:
+{{#each benefit}}
+- {{this}}
+{{/each}}
+
+{{/each}}
+
+---
+
+## 📊 变更清单 (Change Summary)
+
+### 按优先级分类
+
+#### 🔴 高优先级 (High Priority)
+{{#each high_priority}}
+- **{{file}}**: {{description}} - 预计时间: {{time}}
+{{/each}}
+
+#### 🟡 中优先级 (Medium Priority)
+{{#each medium_priority}}
+- **{{file}}**: {{description}} - 预计时间: {{time}}
+{{/each}}
+
+#### 🟢 低优先级 (Low Priority)
+{{#each low_priority}}
+- **{{file}}**: {{description}} - 预计时间: {{time}}
+{{/each}}
+
+---
+
+## 📝 详细变更说明 (Detailed Changes)
+
+{{#each change}}
+### 变更 {{@index}}: {{title}}
+
+#### 文件信息
+- **文件路径**: {{file_path}}
+- **变更类型**: {{change_type}}
+- **预计影响**: {{impact}}
+
+#### 当前代码（重构前）
+```java
+{{old_code}}
+```
+
+#### 重构后代码
+```java
+{{new_code}}
+```
+
+#### 变更说明
+{{#each modification}}
+- {{description}}
+{{/each}}
+
+#### 影响评估
+- **修改行数**: {{lines_modified}}
+- **新增行数**: {{lines_added}}
+- **删除行数**: {{lines_removed}}
+- **新增类**: {{new_classes}}
+- **破坏性变更**: {{breaking_changes}}
+
+#### 测试影响
+- **需要更新的测试**: {{tests_to_update}}
+- **新增测试**: {{new_tests}}
+- **测试策略**: {{test_strategy}}
+
+---
+
+{{/each}}
+
+## ⚠️ 风险评估 (Risk Assessment)
+
+### 高风险变更
+{{#each high_risk}}
+- **{{component}}**: {{description}}
+  - **缓解措施**:
+    {{#each mitigation}}
+    - {{this}}
+    {{/each}}
+{{/each}}
+
+### 中风险变更
+{{#each medium_risk}}
+- **{{component}}**: {{description}}
+  - **缓解措施**:
+    {{#each mitigation}}
+    - {{this}}
+    {{/each}}
+{{/each}}
+
+### 低风险变更
+{{#each low_risk}}
+- **{{component}}**: {{description}}
+  - **缓解措施**:
+    {{#each mitigation}}
+    - {{this}}
+    {{/each}}
+{{/each}}
+
+---
+
+## 🔗 依赖关系分析 (Dependency Analysis)
+
+### 需要同步修改的文件
+{{#each dependency}}
+- **{{file}}**: {{reason}}
+{{/each}}
+
+### 新增依赖
+{{#each new_dependency}}
+- **{{name}}**: {{version}} - {{purpose}}
+{{/each}}
+
+### 删除的依赖
+{{#each removed_dependency}}
+- **{{name}}**: {{reason}}
+{{/each}}
+
+---
+
+## 🔄 回滚计划 (Rollback Plan)
+
+### 回滚触发条件
+{{#each rollback_trigger}}
+- {{condition}}
+{{/each}}
+
+### 自动回滚步骤
+如果重构失败，系统将自动执行：
+
+1. **停止应用变更**
+   ```bash
+   # 中止当前操作
+   /refactor-apply --stop
+   ```
+
+2. **从备份恢复**
+   ```bash
+   # 恢复原始文件
+   /refactor-apply --rollback {{backup_location}}
+   ```
+
+3. **验证恢复**
+   ```bash
+   # 编译检查
+   mvn clean compile
+
+   # 运行测试
+   mvn test
+   ```
+
+### 手动回滚步骤
+
+如果自动回滚失败，请按以下步骤手动回滚：
+
+#### 步骤1: 恢复源代码
+```bash
+# 使用git恢复
+git checkout HEAD~1 -- {{affected_files}}
+
+# 或使用备份文件
+cp {{backup_location}}/*.java {{target_path}}/
+```
+
+#### 步骤2: 删除新增文件
+```bash
+# 删除重构创建的新文件
+rm -f {{new_files}}
+```
+
+#### 步骤3: 恢复依赖
+```bash
+# 恢复原始依赖版本
+mvn dependency:purge
+```
+
+#### 步骤4: 验证系统
+```bash
+# 编译验证
+mvn clean compile
+
+# 测试验证
+mvn test
+
+# 启动应用
+mvn spring-boot:run
+```
+
+---
+
+## ⏱️ 执行时间线 (Timeline)
+
+| 阶段 | 任务 | 预计时间 | 负责人 | 状态 |
+|------|------|----------|--------|------|
+| {{phase_1_name}} | {{phase_1_task}} | {{phase_1_time}} | {{phase_1_owner}} | ☐ |
+| {{phase_2_name}} | {{phase_2_task}} | {{phase_2_time}} | {{phase_2_owner}} | ☐ |
+| {{phase_3_name}} | {{phase_3_task}} | {{phase_3_time}} | {{phase_3_owner}} | ☐ |
+| {{phase_4_name}} | {{phase_4_task}} | {{phase_4_time}} | {{phase_4_owner}} | ☐ |
+
+**总计时间**: {{total_time}}
+
+---
+
+## ✅ 批准清单 (Approval Checklist)
+
+### 代码审查
+- [ ] 高级开发人员审查完成
+- [ ] 架构师审查完成
+- [ ] 安全审查完成（如适用）
+- [ ] 性能审查完成（如适用）
+
+### 测试准备
+- [ ] 单元测试已编写
+- [ ] 集成测试已更新
+- [ ] 测试执行计划已准备
+- [ ] 测试数据已准备
+
+### 部署准备
+- [ ] 部署窗口已协调
+- [ ] 利益相关者已通知
+- [ ] 监控和告警已配置
+- [ ] 回滚计划已测试
+
+### 文档更新
+- [ ] API文档已更新
+- [ ] 架构图已更新
+- [ ] 运维手册已更新
+- [ ] 变更日志已编写
+
+### 批准签字
+
+| 角色 | 姓名 | 签字 | 日期 |
+|------|------|------|------|
+| 开发负责人 | _________________ | ☐ | |
+| 代码审查员 | _________________ | ☐ | |
+| 测试负责人 | _________________ | ☐ | |
+| 架构师 | _________________ | ☐ | |
+| 产品负责人 | _________________ | ☐ | |
+
+---
+
+## 📎 附录 (Appendix)
+
+### A. 相关文档
+{{#each related_document}}
+- [{{title}}]({{url}})
+{{/each}}
+
+### B. 讨论记录
+{{#each discussion}}
+- **{{date}}**: {{topic}}
+  - 参与者: {{participants}}
+  - 结论: {{conclusion}}
+{{/each}}
+
+### C. 联系方式
+- **主要负责人**: {{primary_contact}}
+- **紧急联系**: {{emergency_contact}}
+- **Slack频道**: {{slack_channel}}
+
+### D. 参考资源
+{{#each reference}}
+- {{title}}: {{link}}
+{{/each}}
+
+---
+
+## 📈 成功指标 (Success Metrics)
+
+### 技术指标
+- [ ] 代码编译通过
+- [ ] 所有测试通过
+- [ ] 代码覆盖率 ≥ {{target_coverage}}%
+- [ ] 圈复杂度 ≤ {{target_complexity}}
+- [ ] 无新增技术债务
+
+### 业务指标
+- [ ] 功能完整性保持
+- [ ] 性能无明显下降
+- [ ] 用户满意度维持
+
+### 质量指标
+- [ ] 代码审查通过
+- [ ] 文档完整更新
+- [ ] 团队知识转移完成
+
+---
+
+**文档版本**: {{doc_version}}
+**最后更新**: {{last_updated}}
+**状态**: {{status}}

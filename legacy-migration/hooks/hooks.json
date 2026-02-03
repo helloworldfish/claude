@@ -1,0 +1,83 @@
+{
+  "preToolUse": [
+    {
+      "name": "migration-context-checker",
+      "description": "Ensures proper migration context and project setup",
+      "pattern": "/migrate|/analyze|/plan|/validate",
+      "enabled": true,
+      "prompt": "Before executing migration commands, verify that:\n\n1. Project path exists and is accessible\n2. Required dependencies and tools are available\n3. Output directories can be created\n4. System resources are sufficient\n\nCheck for potential issues:\n- File permissions\n- Disk space requirements\n- Network connectivity\n- External service availability\n\nIf any issues are detected, provide specific guidance for resolution."
+    },
+    {
+      "name": "migration-safety-checker",
+      "description": "Validates migration safety and backup requirements",
+      "pattern": ".*create.*|.*write.*|.*delete.*|.*update.*",
+      "enabled": true,
+      "prompt": "Before modifying files or systems during migration:\n\n1. Verify backup procedures are in place\n2. Confirm rollback capability exists\n3. Check that critical data is protected\n4. Validate that changes won't affect production systems\n\nSafety checks:\n- Ensure working with non-production environments\n- Verify data backup availability\n- Confirm change approval processes\n- Check for potential data loss scenarios\n\nIf any safety concerns exist, halt operation and provide guidance."
+    }
+  ],
+  "postToolUse": [
+    {
+      "name": "migration-progress-tracker",
+      "description": "Tracks migration progress and updates status",
+      "pattern": "/migrate|/analyze|/plan|/validate",
+      "enabled": true,
+      "prompt": "After migration command execution:\n\n1. Update migration progress tracking\n2. Record completed milestones\n3. Document any issues or blockers\n4. Update next steps and dependencies\n\nProgress tracking:\n- Log completed activities and outcomes\n- Update migration timeline if needed\n- Record new risks or concerns\n- Document lessons learned\n\nProvide summary of progress achieved and upcoming activities."
+    },
+    {
+      "name": "migration-quality-gate",
+      "description": "Enforces migration quality standards and validation",
+      "pattern": ".*migration.*|.*refactor.*|.*transform.*",
+      "enabled": true,
+      "prompt": "After migration-related activities:\n\n1. Validate code quality standards are met\n2. Check for proper error handling\n3. Verify documentation completeness\n4. Ensure test coverage is adequate\n\nQuality validation:\n- Review code changes for best practices\n- Check for potential security issues\n- Validate performance implications\n- Ensure business logic preservation\n\nDocument quality assessment and any required improvements."
+    }
+  ],
+  "stop": [
+    {
+      "name": "migration-cleanup-handler",
+      "description": "Performs cleanup and finalization when migration session ends",
+      "enabled": true,
+      "prompt": "When migration session is ending:\n\n1. Save all migration progress and state\n2. Backup critical migration artifacts\n3. Document current migration status\n4. Prepare continuation plan for next session\n\nCleanup activities:\n- Save all generated reports and analysis\n- Backup configuration files and scripts\n- Document incomplete activities\n- Prepare migration handoff summary\n\nEnsure all work is properly saved and documented for session continuation."
+    }
+  ],
+  "sessionStart": [
+    {
+      "name": "migration-session-initializer",
+      "description": "Initializes migration session context and requirements",
+      "enabled": true,
+      "prompt": "Starting new migration session:\n\n1. Load previous migration context if available\n2. Set up working directories and configurations\n3. Verify required tools and dependencies\n4. Establish migration objectives and scope\n\nSession initialization:\n- Check for existing migration work\n- Set up project environment\n- Validate toolchain availability\n- Review migration goals and constraints\n\nProvide session overview and readiness status."
+    }
+  ],
+  "sessionEnd": [
+    {
+      "name": "migration-session-finalizer",
+      "description": "Finalizes migration session and prepares for continuation",
+      "enabled": true,
+      "prompt": "Finalizing migration session:\n\n1. Consolidate all session results and artifacts\n2. Update migration documentation and status\n3. Archive session logs and outputs\n4. Plan next session activities\n\nSession finalization:\n- Generate session summary report\n- Update migration progress tracking\n- Archive all session artifacts\n- Document next steps and dependencies\n\nEnsure all work is properly saved and accessible for future sessions."
+    }
+  ],
+  "userPromptSubmit": [
+    {
+      "name": "migration-request-validator",
+      "description": "Validates user migration requests for feasibility and safety",
+      "pattern": ".*migrate.*|.*analyze.*|.*transform.*|.*refactor.*",
+      "enabled": true,
+      "prompt": "Before processing migration request:\n\n1. Validate request feasibility and safety\n2. Check for potential conflicts or risks\n3. Verify required information is provided\n4. Assess impact on current migration progress\n\nRequest validation:\n- Confirm project path and accessibility\n- Verify migration scope is appropriate\n- Check for potential data safety issues\n- Validate resource requirements\n\nIf request cannot be safely executed, provide guidance on required changes or alternatives."
+    }
+  ],
+  "preCompact": [
+    {
+      "name": "migration-context-preservation",
+      "description": "Preserves critical migration context before conversation compaction",
+      "enabled": true,
+      "prompt": "Before conversation compaction:\n\n1. Identify and preserve critical migration context\n2. Save migration progress and state information\n3. Archive important analysis results\n4. Document key decisions and findings\n\nContext preservation:\n- Migration phase and current activities\n- Key analysis results and findings\n- Important configuration and settings\n- Critical risks and mitigation strategies\n- Next steps and dependencies\n\nEnsure essential migration context is retained for continued work."
+    }
+  ],
+  "notification": [
+    {
+      "name": "migration-milestone-notifier",
+      "description": "Notifies about migration milestones and significant achievements",
+      "enabled": true,
+      "prompt": "When migration milestones are achieved:\n\n1. Document the milestone and its significance\n2. Update migration progress tracking\n3. Notify stakeholders of achievement\n4. Plan next phase activities\n\nMilestone notification:\n- Describe completed milestone and its importance\n- Update overall migration progress percentage\n- Document any new capabilities or improvements\n- Outline next steps and timeline\n\nProvide clear celebration of achievement and path forward."
+    }
+  ]
+}
