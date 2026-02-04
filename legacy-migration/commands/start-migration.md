@@ -13,7 +13,7 @@
 
 ## 使用方法
 
-```bash
+```
 /start-migration [选项]
 ```
 

@@ -7,11 +7,11 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SESSIONS_DIR="${SESSIONS_DIR:-$HOME/.legacy-migration/sessions}"
-STATE_DIR="${STATE_DIR:-$HOME/.legacy-migration/state}"
-CACHE_DIR="${CACHE_DIR:-$HOME/.legacy-migration/cache}"
-CONFIG_DIR="${CONFIG_DIR:-$HOME/.legacy-migration/config}"
-TEMP_DIR="${TEMP_DIR:-$HOME/.legacy-migration/temp}"
+SESSIONS_DIR="${SESSIONS_DIR:-$PROJECT_ROOT/.legacy-migration/sessions}"
+STATE_DIR="${STATE_DIR:-$PROJECT_ROOT/.legacy-migration/state}"
+CACHE_DIR="${CACHE_DIR:-$PROJECT_ROOT/.legacy-migration/cache}"
+CONFIG_DIR="${CONFIG_DIR:-$PROJECT_ROOT/.legacy-migration/config}"
+TEMP_DIR="${TEMP_DIR:-$PROJECT_ROOT/.legacy-migration/temp}"
 
 # Color scheme
 RED='\033[0;31m'
@@ -29,6 +29,7 @@ CURRENT_PROJECT=""
 CONFIG_FILE=""
 AUTO_MODE=false
 VERBOSE=false
+INTERRUPTED=false
 
 # Logging functions
 log() {
@@ -47,6 +48,57 @@ log() {
 
     # Also to log file
     echo "[$timestamp] [$level] $message" >> "$TEMP_DIR/assistant.log"
+}
+
+# Handle interruption
+handle_interrupt() {
+    log "WARNING" "收到中断信号，正在保存状态..."
+    INTERRUPTED=true
+
+    # Save current state if we have an active session
+    if [[ -n "$CURRENT_SESSION" ]]; then
+        save_interrupted_state "$CURRENT_SESSION"
+
+        # Save checkpoint
+        "$SCRIPT_DIR/session-manager.sh" checkpoint "$CURRENT_SESSION" "interrupted" "{}"
+
+        log "INFO" "状态已保存，可以通过以下命令恢复: $0 --resume --session-id $CURRENT_SESSION"
+    fi
+
+    exit 130
+}
+
+# Save state when interrupted
+save_interrupted_state() {
+    local session_id="$1"
+    local session_dir="$SESSIONS_DIR/$session_id"
+    local state_file="$session_dir/state/session-state.json"
+
+    if [[ -f "$state_file" ]]; then
+        # Update state to reflect interruption
+        jq ".status = \"interrupted\" | .interrupted_at = \"$(date -Iseconds)\" | .interrupted = true" "$state_file" > "${state_file}.tmp" && \
+        mv "${state_file}.tmp" "$state_file"
+
+        log "INFO" "中断状态已保存: $session_id"
+    fi
+}
+
+# Save periodic checkpoint
+save_periodic_checkpoint() {
+    local session_id="$1"
+
+    if [[ -n "$session_id" ]]; then
+        local checkpoint_data=$(jq -n \
+            --arg timestamp "$(date -Iseconds)" \
+            --arg progress "$(cat "$SESSIONS_DIR/$session_id/state/session-state.json" | jq '.progress')" \
+            '{timestamp: $timestamp, progress: $progress}')
+
+        "$SCRIPT_DIR/session-manager.sh" checkpoint "$session_id" "periodic" "$checkpoint_data"
+
+        if [[ "$VERBOSE" == true ]]; then
+            log "DEBUG" "检查点已保存: $session_id"
+        fi
+    fi
 }
 
 # Initialize environment
@@ -332,6 +384,9 @@ run_migration_workflow() {
     local session_dir="$1"
     local session_id="$CURRENT_SESSION"
 
+    # Set up signal traps
+    trap handle_interrupt SIGINT SIGTERM
+
     log "INFO" "Starting migration workflow for session: $session_id"
 
     # Load session data
@@ -345,6 +400,7 @@ run_migration_workflow() {
     # Execute steps
     local total_steps=$(echo "$steps" | jq length)
     local completed_steps=0
+    local last_checkpoint_time=0
 
     echo "$steps" | while read -r step; do
         local step_name=$(echo "$step" | jq -r '.name')
@@ -358,12 +414,25 @@ run_migration_workflow() {
         # Update status
         update_step_status "$session_id" "$step_name" "running"
 
+        # Save periodic checkpoint every 2 steps or every 5 minutes
+        local current_time=$(date +%s)
+        if [[ $((current_time - last_checkpoint_time)) -gt 300 || $completed_steps -gt 0 && $((completed_steps % 2)) -eq 0 ]]; then
+            save_periodic_checkpoint "$session_id"
+            last_checkpoint_time=$current_time
+        fi
+
         # Simulate processing (in real implementation, call actual migration tools)
         if [[ "$AUTO_MODE" == true ]]; then
             log "INFO" "Auto-processing step: $step_name"
             simulate_step_execution "$step_name"
         else
             interactive_step_execution "$step_name" "$session_dir"
+        fi
+
+        # Check if was interrupted
+        if [[ "$INTERRUPTED" == true ]]; then
+            log "WARNING" "检测到中断，退出迁移工作流"
+            return
         fi
 
         # Mark as completed
@@ -387,29 +456,40 @@ monitor_context_during_execution() {
     local session_id="$1"
     local step_name="$2"
 
-    # Estimate context usage based on step complexity
-    local estimated_tokens=0
-
-    case "$step_name" in
-        "analyze")
-            estimated_tokens=50000
-            ;;
-        "plan")
-            estimated_tokens=30000
-            ;;
-        "transform")
-            estimated_tokens=80000
-            ;;
-        "validate")
-            estimated_tokens=40000
-            ;;
-        "deploy")
-            estimated_tokens=20000
-            ;;
-        *)
-            estimated_tokens=25000
-            ;;
-    esac
+    # Load unified configuration
+    if [[ -f "$PROJECT_ROOT/context-config.json" ]]; then
+        # Get step weights from config
+        local step_config=$(jq -r ".token_estimation.step_weights.$step_name" "$PROJECT_ROOT/context-config.json")
+        if [[ "$step_config" != "null" ]]; then
+            local base_tokens=$(echo "$step_config" | jq -r '.base')
+            local multiplier=$(echo "$step_config" | jq -r '.multiplier')
+            local estimated_tokens=$((base_tokens * multiplier / 100 * 100))  # Handle potential decimals
+        else
+            estimated_tokens=50000  # fallback
+        fi
+    else
+        # Estimate context usage based on step complexity
+        case "$step_name" in
+            "analyze")
+                estimated_tokens=50000
+                ;;
+            "plan")
+                estimated_tokens=30000
+                ;;
+            "transform")
+                estimated_tokens=80000
+                ;;
+            "validate")
+                estimated_tokens=40000
+                ;;
+            "deploy")
+                estimated_tokens=20000
+                ;;
+            *)
+                estimated_tokens=25000
+                ;;
+        esac
+    fi
 
     # Check if we need to monitor context
     if command -v context-manager.sh >/dev/null 2>&1; then
@@ -426,19 +506,116 @@ monitor_context_during_execution() {
     fi
 }
 
+# Validate backup integrity
+validate_backup() {
+    local backup_dir="$1"
+    local manifest_file="$backup_dir/backup-manifest.json"
+
+    if [[ ! -f "$manifest_file" ]]; then
+        log "ERROR" "Backup manifest not found: $manifest_file"
+        return 1
+    fi
+
+    # Check if all files in manifest exist
+    local files_list="$backup_dir/files.list"
+    if [[ -f "$files_list" ]]; then
+        local missing_files=0
+        while IFS= read -r file; do
+            if [[ ! -f "$backup_dir/$file" ]]; then
+                log "WARNING" "Missing file in backup: $file"
+                missing_files=$((missing_files + 1))
+            fi
+        done < "$files_list"
+
+        if [[ $missing_files -gt 0 ]]; then
+            log "ERROR" "Backup validation failed: $missing_files files missing"
+            return 1
+        fi
+    fi
+
+    # Check backup status
+    local status=$(jq -r '.status' "$manifest_file")
+    if [[ "$status" != "completed" ]]; then
+        log "ERROR" "Backup not completed: status = $status"
+        return 1
+    fi
+
+    log "SUCCESS" "Backup validation passed: $backup_dir"
+    return 0
+}
+
+# List available backups
+list_backups() {
+    local backup_root="${1:-$PROJECT_ROOT/.refactor-backups}"
+
+    if [[ ! -d "$backup_root" ]]; then
+        echo "No backups found"
+        return 0
+    fi
+
+    echo "📋 可用备份列表"
+    echo "==============="
+    echo ""
+
+    # Find backup directories
+    for backup_dir in "$backup_root"/migration-*; do
+        if [[ -d "$backup_dir" ]]; then
+            local manifest_file="$backup_dir/backup-manifest.json"
+            if [[ -f "$manifest_file" ]]; then
+                local session_id=$(jq -r '.session_id' "$manifest_file")
+                local backup_time=$(jq -r '.backup_at' "$manifest_file")
+                local files_count=$(jq -r '.files_count' "$manifest_file")
+                local backup_size=$(jq -r '.backup_size' "$manifest_file")
+                local status=$(jq -r '.status' "$manifest_file")
+
+                # Format size
+                local size_str=""
+                if [[ "$backup_size" -gt 1048576 ]]; then
+                    size_str=$(echo "scale=2; $backup_size / 1048576" | bc)" MB"
+                elif [[ "$backup_size" -gt 1024 ]]; then
+                    size_str=$(echo "scale=2; $backup_size / 1024" | bc)" KB"
+                else
+                    size_str="$backup_size B"
+                fi
+
+                # Status indicator
+                local status_indicator="✅"
+                if [[ "$status" != "completed" ]]; then
+                    status_indicator="❌"
+                fi
+
+                echo "${status_indicator} 会话: $session_id"
+                echo "   时间: $backup_time"
+                echo "   文件: $files_count 个"
+                echo "   大小: $size_str"
+                echo ""
+            fi
+        fi
+    done
+
+    # Show latest backup symlink
+    if [[ -L "$backup_root/latest" ]]; then
+        local latest_path=$(readlink "$backup_root/latest")
+        echo "🔄 最新备份: $latest_path"
+    fi
+}
+
 # Create backup of project files
 create_project_backup() {
     local session_id="$1"
     local project_path="$2"
+    local backup_root="${3:-$PROJECT_ROOT/.refactor-backups}"
 
     log "INFO" "Creating project backup for session: $session_id"
 
-    # Get session directory
-    local session_dir="$SESSIONS_DIR/$session_id"
-    local backup_dir="$session_dir/backup"
+    # Create backup directory with timestamp
+    local timestamp=$(date +%Y-%m-%d-%H%M%S)
+    local backup_dir="$backup_root/migration-$timestamp"
+    local session_backup_dir="$SESSIONS_DIR/$session_id/backup"
 
-    # Create backup directory
+    # Create backup directories
     mkdir -p "$backup_dir"
+    mkdir -p "$session_backup_dir"
 
     # Create backup manifest
     local manifest_file="$backup_dir/backup-manifest.json"
@@ -447,8 +624,23 @@ create_project_backup() {
   "session_id": "$session_id",
   "backup_at": "$(date -Iseconds)",
   "project_path": "$project_path",
+  "backup_dir": "$backup_dir",
   "backup_size": 0,
-  "files_count": 0
+  "files_count": 0,
+  "status": "created"
+}
+EOF
+
+    # Create session backup manifest
+    cat > "$session_backup_dir/backup-manifest.json" << EOF
+{
+  "session_id": "$session_id",
+  "backup_at": "$(date -Iseconds)",
+  "project_path": "$project_path",
+  "main_backup_dir": "$backup_dir",
+  "backup_size": 0,
+  "files_count": 0,
+  "status": "created"
 }
 EOF
 
@@ -457,6 +649,7 @@ EOF
         log "INFO" "Using git to track files for backup"
         cd "$project_path"
         git ls-files > "$backup_dir/files.list"
+        git ls-files > "$session_backup_dir/files.list"
 
         local file_count=0
         local total_size=0
@@ -464,37 +657,67 @@ EOF
         while IFS= read -r file; do
             if [ -f "$file" ]; then
                 mkdir -p "$backup_dir/$(dirname "$file")"
+                mkdir -p "$session_backup_dir/$(dirname "$file")"
                 cp "$file" "$backup_dir/$file"
+                cp "$file" "$session_backup_dir/$file"
                 file_count=$((file_count + 1))
                 local file_size=$(stat -c%s "$file")
                 total_size=$((total_size + file_size))
             fi
         done < "$backup_dir/files.list"
 
-        # Update manifest
+        # Update manifests
         jq --arg files_count "$file_count" --arg total_size "$total_size" \
-           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber)' \
+           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber) | .status = "completed"' \
            "$manifest_file" > "$manifest_file.tmp" && mv "$manifest_file.tmp" "$manifest_file"
 
-        log "SUCCESS" "Backup created: $file_count files, $total_size bytes"
+        jq --arg files_count "$file_count" --arg total_size "$total_size" \
+           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber) | .status = "completed"' \
+           "$session_backup_dir/backup-manifest.json" > "$session_backup_dir/backup-manifest.tmp" && \
+           mv "$session_backup_dir/backup-manifest.tmp" "$session_backup_dir/backup-manifest.json"
+
+        log "SUCCESS" "Backup created: $file_count files, $total_size bytes in $backup_dir"
     else
         log "WARNING" "No git repository found, backing up all files"
         # Fallback: backup all files (simple approach)
         find "$project_path" -type f -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/target/*" -not -path "*/build/*" | while read -r file; do
             local rel_path="${file#$project_path/}"
             mkdir -p "$backup_dir/$(dirname "$rel_path")"
+            mkdir -p "$session_backup_dir/$(dirname "$rel_path")"
             cp "$file" "$backup_dir/$rel_path"
+            cp "$file" "$session_backup_dir/$rel_path"
         done
 
-        # Update manifest
+        # Update manifests
         local file_count=$(find "$backup_dir" -type f | wc -l)
         local total_size=$(du -sb "$backup_dir" | cut -f1)
         jq --arg files_count "$file_count" --arg total_size "$total_size" \
-           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber)' \
+           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber) | .status = "completed"' \
            "$manifest_file" > "$manifest_file.tmp" && mv "$manifest_file.tmp" "$manifest_file"
 
-        log "SUCCESS" "Backup created: $file_count files, $total_size bytes"
+        jq --arg files_count "$file_count" --arg total_size "$total_size" \
+           '.files_count = ($files_count | tonumber) | .backup_size = ($total_size | tonumber) | .status = "completed"' \
+           "$session_backup_dir/backup-manifest.json" > "$session_backup_dir/backup-manifest.tmp" && \
+           mv "$session_backup_dir/backup-manifest.tmp" "$session_backup_dir/backup-manifest.json"
+
+        log "SUCCESS" "Backup created: $file_count files, $total_size bytes in $backup_dir"
     fi
+
+    # Create symlink for easy access
+    if [[ -L "$backup_root/latest" ]]; then
+        rm "$backup_root/latest"
+    fi
+    ln -s "$backup_dir" "$backup_root/latest"
+
+    # Validate backup
+    if validate_backup "$backup_dir"; then
+        log "SUCCESS" "Backup created and validated: $backup_dir"
+    else
+        log "ERROR" "Backup validation failed: $backup_dir"
+        return 1
+    fi
+
+    echo "$backup_dir"
 }
 
 # Simulate step execution (for testing)
@@ -509,9 +732,11 @@ simulate_step_execution() {
 
     # Create backup before implementation step
     if [[ "$step_name" == "implementation" ]]; then
-        local project_path=$(cat "$SESSIONS_DIR/$session_id/config/migration-config.yml" | grep "path:" | cut -d'"' -f2)
-        create_project_backup "$session_id" "$project_path"
-        log "INFO" "Project backup created before implementation"
+        local project_path=$(cat "$session_dir/config/migration-config.yml" | grep "path:" | cut -d'"' -f2)
+        local backup_dir=$(create_project_backup "$session_id" "$project_path" "$PROJECT_ROOT/.refactor-backups")
+        log "INFO" "Project backup created: $backup_dir"
+        echo "${GREEN}✓ 项目备份已创建: $backup_dir${NC}"
+        echo ""
     fi
 
     # Simulate work
@@ -546,9 +771,9 @@ interactive_step_execution() {
     # Create backup before implementation step
     if [[ "$step_name" == "implementation" ]]; then
         local project_path=$(cat "$session_dir/config/migration-config.yml" | grep "path:" | cut -d'"' -f2)
-        create_project_backup "$CURRENT_SESSION" "$project_path"
-        log "INFO" "Project backup created before implementation"
-        echo "${GREEN}✓ Project backup created${NC}"
+        local backup_dir=$(create_project_backup "$CURRENT_SESSION" "$project_path" "$PROJECT_ROOT/.refactor-backups")
+        log "INFO" "Project backup created: $backup_dir"
+        echo "${GREEN}✓ 项目备份已创建: $backup_dir${NC}"
         echo ""
     fi
 
@@ -576,19 +801,126 @@ interactive_step_execution() {
     read -p "Press Enter to continue to next step..."
 }
 
-# Update step status
+# Update step status with more detailed tracking
 update_step_status() {
     local session_id="$1"
     local step_name="$2"
     local status="$3"
+    local additional_info="$4"  # Optional: error details, files processed, etc.
 
     local session_dir="$SESSIONS_DIR/$session_id"
     local state_file="$session_dir/state/session-state.json"
 
     if [[ -f "$state_file" ]]; then
-        jq ".steps_completed += [\"$step_name\"]" "$state_file" > "${state_file}.tmp" && \
-        mv "${state_file}.tmp" "$state_file"
+        # Create backup of current state
+        cp "$state_file" "$state_file.backup.$(date +%s)"
+
+        # Update step status
+        if [[ "$status" == "completed" ]]; then
+            jq ".steps_completed += [\"$step_name\"]" "$state_file" > "${state_file}.tmp" && \
+            mv "${state_file}.tmp" "$state_file"
+        elif [[ "$status" == "failed" ]]; then
+            jq ".steps_failed += [\"$step_name\"]" "$state_file" > "${state_file}.tmp" && \
+            mv "${state_file}.tmp" "$state_file"
+
+            # Add error information if provided
+            if [[ -n "$additional_info" ]]; then
+                jq ".step_errors += {\"$step_name\": $additional_info}" "$state_file" > "${state_file}.tmp" && \
+                mv "${state_file}.tmp" "$state_file"
+            fi
+        elif [[ "$status" == "running" ]]; then
+            jq ".steps_in_progress = [\"$step_name\"]" "$state_file" > "${state_file}.tmp" && \
+            mv "${state_file}.tmp" "$state_file"
+        fi
+
+        # Update last update time
+        sed -i "s/\"last_update\": \"[^\"]*\"/\"last_update\": \"$(date -Iseconds)\"/" "$state_file"
+
+        # Save checkpoint when status changes
+        if [[ "$status" == "completed" || "$status" == "failed" ]]; then
+            local checkpoint_data=$(jq -n \
+                --arg step "$step_name" \
+                --arg status "$status" \
+                --arg timestamp "$(date -Iseconds)" \
+                '{step: $step, status: $status, timestamp: $timestamp}')
+
+            "$SCRIPT_DIR/session-manager.sh" checkpoint "$session_id" "step_$status" "$checkpoint_data"
+        fi
     fi
+}
+
+# Get pending tasks for recovery
+get_pending_tasks() {
+    local session_id="$1"
+    local session_dir="$SESSIONS_DIR/$session_id"
+    local state_file="$session_dir/state/session-state.json"
+
+    if [[ ! -f "$state_file" ]]; then
+        echo "[]"
+        return
+    fi
+
+    # Get plan data
+    local plan_file="$session_dir/config/migration-plan.json"
+    local all_steps=$(jq '.steps[] | .name' "$plan_file")
+
+    # Get completed steps
+    local completed_steps=$(jq '.steps_completed[]' "$state_file" 2>/dev/null || echo "")
+
+    # Find pending steps
+    echo "$all_steps" | jq -n 'inputs | select(. as $item | inputs | contains($item) | not)'
+}
+
+# Generate recovery summary
+generate_recovery_summary() {
+    local session_id="$1"
+    local session_dir="$SESSIONS_DIR/$session_id"
+
+    if [[ ! -d "$session_dir" ]]; then
+        echo "Session not found: $session_id"
+        return 1
+    fi
+
+    local state_file="$session_dir/state/session-state.json"
+    local config_file="$session_dir/config/migration-config.yml"
+    local plan_file="$session_dir/config/migration-plan.json"
+
+    # Extract information
+    local project_name=$(grep "name:" "$config_file" | cut -d'"' -f2)
+    local progress=$(jq -r '.progress // 0' "$state_file" 2>/dev/null)
+    local status=$(jq -r '.status // "unknown"' "$state_file" 2>/dev/null)
+    local completed_steps=$(jq '.steps_completed | length // 0' "$state_file" 2>/dev/null)
+    local total_steps=$(jq '.steps | length' "$plan_file")
+
+    # Get pending tasks
+    local pending_tasks=$(get_pending_tasks "$session_id")
+    local pending_count=$(echo "$pending_tasks" | jq length)
+
+    # Generate summary
+    cat << EOF
+# 恢复摘要 - 会话: $session_id
+
+## 项目信息
+- **项目名称**: $project_name
+- **当前进度**: $progress%
+- **会话状态**: $status
+
+## 任务统计
+- **总步骤数**: $total_steps
+- **已完成**: $completed_steps
+- **待完成**: $pending_count
+
+## 待完成任务$(echo "$pending_tasks" | jq -r '.[]' | sed 's/^/- /' | head -10)
+$(if [[ $pending_count -gt 10 ]]; then echo "(只显示前10个)"; fi)
+
+## 恢复命令
+\`\`\`
+./commands/start-migration --resume --session-id $session_id
+\`\`\`
+
+---
+*恢复时间: $(date)*
+EOF
 }
 
 # Update session progress
@@ -719,8 +1051,34 @@ resume_migration() {
         exit 1
     fi
 
+    # Check if session was interrupted
+    local state_file="$SESSIONS_DIR/$session_id/state/session-state.json"
+    if [[ -f "$state_file" ]]; then
+        local interrupted=$(jq -r '.interrupted // false' "$state_file")
+        if [[ "$interrupted" == "true" ]]; then
+            log "INFO" "检测到之前中断的会话，正在恢复..."
+            # Save interrupted state record
+            jq ".recovery_attempts = (.recovery_attempts // 0 + 1)" "$state_file" > "${state_file}.tmp" && \
+            mv "${state_file}.tmp" "$state_file"
+        fi
+    fi
+
     # Load session
     local session_dir=$( "$SCRIPT_DIR/session-manager.sh" resume "$session_id" )
+
+    # Generate and show recovery summary
+    echo "${WHITE}📋 恢复摘要${NC}"
+    echo "============="
+    echo ""
+    generate_recovery_summary "$session_id"
+    echo ""
+
+    # Ask for confirmation to resume
+    read -p "是否继续恢复此会话? (y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        log "INFO" "恢复已取消"
+        exit 0
+    fi
 
     # Resume workflow
     run_migration_workflow "$session_dir"

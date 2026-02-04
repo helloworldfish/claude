@@ -8,10 +8,24 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_DIR="${STATE_DIR:-$HOME/.legacy-migration/state}"
-CONTEXT_THRESHOLD="${CONTEXT_THRESHOLD:-180000}"  # 180K tokens - 预警线
-CONTEXT_HARD_LIMIT="${CONTEXT_HARD_LIMIT:-195000}"  # 195K tokens - 硬限制
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../" && pwd)"
+CONFIG_FILE="$PROJECT_ROOT/context-config.json"
 COMPRESSION_DIR="$STATE_DIR/compression"
 TEMP_COMPRESSION="$TEMP_DIR/compression_$$"
+
+# Load configuration from unified config file
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        CONTEXT_THRESHOLD=$(jq -r '.context_thresholds.preventive' "$CONFIG_FILE")
+        CONTEXT_HARD_LIMIT=$(jq -r '.context_thresholds.hard_limit' "$CONFIG_FILE")
+    else
+        CONTEXT_THRESHOLD="${CONTEXT_THRESHOLD:-150000}"  # 150K tokens - 预警线
+        CONTEXT_HARD_LIMIT="${CONTEXT_HARD_LIMIT:-200000}"  # 200K tokens - 硬限制
+    fi
+}
+
+# Initialize config
+load_config
 
 # Colors
 RED='\033[0;31m'

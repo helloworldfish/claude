@@ -66,9 +66,15 @@ EOF
 
     # Initialize context manager if available
     if [[ -f "$SCRIPT_DIR/context-manager.sh" ]]; then
-        # Set context-specific thresholds
-        export CONTEXT_THRESHOLD="170000"
-        export CONTEXT_HARD_LIMIT="185000"
+        # Use unified configuration
+        PROJECT_ROOT="$(cd "$SCRIPT_DIR/../" && pwd)"
+        if [[ -f "$PROJECT_ROOT/context-config.json" ]]; then
+            export CONTEXT_THRESHOLD=$(jq -r '.context_thresholds.preventive' "$PROJECT_ROOT/context-config.json")
+            export CONTEXT_HARD_LIMIT=$(jq -r '.context_thresholds.hard_limit' "$PROJECT_ROOT/context-config.json")
+        else
+            export CONTEXT_THRESHOLD="150000"
+            export CONTEXT_HARD_LIMIT="200000"
+        fi
 
         log_success "Context management initialized for session: $session_id"
     else
