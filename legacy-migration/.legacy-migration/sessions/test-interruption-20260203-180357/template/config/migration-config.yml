@@ -1,0 +1,40 @@
+# Migration Configuration Template
+project:
+  name: ""
+  path: ""
+  type: ""
+  original_state: {}
+  target_state: {}
+
+migration:
+  goals: []
+  strategy: "balanced"
+  safety_level: "high"
+  parallel_execution: false
+  incremental_support: true
+
+session:
+  id: ""
+  created_at: ""
+  status: "created"
+  progress: 0
+  current_step: 0
+  total_steps: 0
+
+state:
+  analyzed_files: []
+  transformed_files: []
+  validated_files: []
+  failed_files: []
+  warnings: []
+  errors: []
+
+backup:
+  enabled: true
+  location: ""
+  manifest: {}
+
+logs:
+  session_log: ""
+  error_log: ""
+  audit_log: ""

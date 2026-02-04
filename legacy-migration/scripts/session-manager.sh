@@ -7,9 +7,9 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SESSIONS_DIR="${SESSIONS_DIR:-$HOME/.legacy-migration/sessions}"
-LOGS_DIR="${LOGS_DIR:-$HOME/.legacy-migration/logs}"
-BACKUP_DIR="${BACKUP_DIR:-$HOME/.legacy-migration/backups}"
+SESSIONS_DIR="${SESSIONS_DIR:-$PROJECT_ROOT/.legacy-migration/sessions}"
+LOGS_DIR="${LOGS_DIR:-$PROJECT_ROOT/.legacy-migration/logs}"
+BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/.refactor-backups}"
 
 # Colors
 RED='\033[0;31m'

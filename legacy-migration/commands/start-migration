@@ -1,0 +1,275 @@
+#!/bin/bash
+
+# Legacy Migration - Start Migration Command
+# 智能代码迁移助手的主入口点
+
+set -euo pipefail
+
+# 获取脚本目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../" && pwd)"
+
+# 设置环境变量
+export PROJECT_ROOT="$PROJECT_ROOT"
+export SESSIONS_DIR="$PROJECT_ROOT/.legacy-migration/sessions"
+export BACKUP_DIR="$PROJECT_ROOT/.refactor-backups"
+export LOGS_DIR="$PROJECT_ROOT/.legacy-migration/logs"
+
+# 创建必要的目录
+mkdir -p "$SESSIONS_DIR"
+mkdir -p "$BACKUP_DIR"
+mkdir -p "$LOGS_DIR"
+
+# 加载脚本库
+source "$PROJECT_ROOT/scripts/migration-assistant.sh"
+source "$PROJECT_ROOT/scripts/session-manager.sh"
+
+# 显示帮助信息
+show_help() {
+    cat << EOF
+Legacy Migration - 智能代码迁移助手
+
+用法: $0 [选项] [参数]
+
+选项:
+  --project-path <路径>    指定项目路径 (默认当前目录)
+  --config <文件>          指定配置文件路径
+  --resume               恢复上次会话
+  --session-id <ID>      指定恢复的会话ID
+  --list-sessions        列出所有会话
+  --list-backups         列出所有备份
+  --verify-backup <ID>   验证指定备份
+  --clean-backups        清理旧备份
+  --verbose              详细输出模式
+  --auto                 自动确认模式
+  --help                 显示此帮助信息
+
+示例:
+  $0 --project-path ./my-project
+  $0 --resume --session-id migration-2026-02-01-14:35
+  $0 --list-sessions
+  $0 --auto --project-path ./my-project
+
+环境变量:
+  SESSIONS_DIR           会话存储目录 (默认: \$HOME/.legacy-migration/sessions)
+  BACKUP_DIR             备份目录 (默认: \$HOME/.legacy-migration/backups)
+  LOGS_DIR               日志目录 (默认: \$HOME/.legacy-migration/logs)
+
+EOF
+}
+
+# 主函数
+main() {
+    local project_path="."
+    local config_file=""
+    local resume=false
+    local session_id=""
+    local list_sessions=false
+    local list_backups=false
+    local verify_backup=""
+    local clean_backups=false
+    local verbose=false
+    local auto_confirm=false
+
+    # 解析命令行参数
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --project-path)
+                project_path="$2"
+                shift 2
+                ;;
+            --config)
+                config_file="$2"
+                shift 2
+                ;;
+            --resume)
+                resume=true
+                shift
+                ;;
+            --session-id)
+                session_id="$2"
+                shift 2
+                ;;
+            --list-sessions)
+                list_sessions=true
+                shift
+                ;;
+            --list-backups)
+                list_backups=true
+                shift
+                ;;
+            --verify-backup)
+                verify_backup="$2"
+                shift 2
+                ;;
+            --clean-backups)
+                clean_backups=true
+                shift
+                ;;
+            --verbose)
+                verbose=true
+                shift
+                ;;
+            --auto)
+                auto_confirm=true
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "错误: 未知选项 '$1'"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+
+    # 设置日志级别
+    if [[ "$verbose" == true ]]; then
+        export VERBOSE=true
+    fi
+
+    # 初始化环境
+    init_assistant
+
+    # 处理不同命令
+    if [[ "$list_sessions" == true ]]; then
+        echo "📋 迁移会话列表"
+        echo "================="
+        list_sessions
+        exit 0
+    fi
+
+    if [[ "$list_backups" == true ]]; then
+        echo "📋 可用备份列表"
+        echo "==============="
+        list_backups
+        exit 0
+    fi
+
+    if [[ -n "$verify_backup" ]]; then
+        echo "🔍 验证备份: $verify_backup"
+        echo "==============="
+        # Find backup directory
+        local backup_dir="$BACKUP_DIR/migration-$verify_backup"
+        if [[ -d "$backup_dir" ]]; then
+            if validate_backup "$backup_dir"; then
+                echo "✅ 备份验证成功"
+            else
+                echo "❌ 备份验证失败"
+                exit 1
+            fi
+        else
+            echo "❌ 备份目录不存在: $backup_dir"
+            exit 1
+        fi
+        exit 0
+    fi
+
+    if [[ "$clean_backups" == true ]]; then
+        echo "🧹 清理旧备份"
+        echo "============"
+        # Ask for confirmation
+        read -p "确定要清理所有旧备份吗? (y/n): " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            find "$BACKUP_DIR" -name "migration-*" -type d -exec rm -rf {} +
+            rm -f "$BACKUP_DIR/latest" 2>/dev/null || true
+            echo "✅ 清理完成"
+        else
+            echo "❌ 清理已取消"
+        fi
+        exit 0
+    fi
+
+    if [[ "$resume" == true ]]; then
+        if [[ -z "$session_id" ]]; then
+            echo "可用的会话:"
+            list_sessions
+            read -p "请输入要恢复的会话ID: " session_id
+        fi
+
+        # Generate recovery summary before resuming
+        echo "📋 恢复摘要 - 会话: $session_id"
+        echo "========================"
+        source "$PROJECT_ROOT/scripts/migration-assistant.sh"
+        generate_recovery_summary "$session_id"
+        echo ""
+
+        resume_migration "$session_id"
+        exit 0
+    fi
+
+    # 开始新的迁移
+    echo "🚀 欢迎使用智能代码迁移助手！"
+    echo "=============================="
+    echo ""
+
+    # 检查项目路径
+    if [[ ! -d "$project_path" ]]; then
+        echo "❌ 错误: 项目路径不存在: $project_path"
+        exit 1
+    fi
+
+    # 自动检测项目
+    echo "🔍 正在检测您的项目..."
+    local project_data=$(detect_project "$project_path")
+    local project_name=$(echo "$project_data" | jq -r '.name')
+    local project_type=$(echo "$project_data" | jq -r '.type')
+
+    echo "✅ 项目类型: $project_type 应用"
+    echo "✅ 项目名称: $project_name"
+    echo ""
+
+    # 创建备份目录（如果不存在）
+    local backup_dir="$PROJECT_ROOT/.refactor-backups"
+    mkdir -p "$backup_dir"
+
+    # 创建迁移会话
+    echo "🔄 正在创建迁移会话..."
+    local plan_data=$(generate_migration_plan "$project_data" "1")
+    local session_dir=$(create_session "$project_data" "$plan_data")
+
+    # 创建项目备份
+    echo "💾 正在创建项目备份..."
+    create_project_backup "$(basename "$session_dir")" "$project_path"
+    echo "✅ 项目备份已创建: $backup_dir/"
+    echo ""
+
+    # 显示迁移方案
+    echo "📋 迁移方案预览"
+    echo "==============="
+    echo "项目: $project_name"
+    echo "路径: $project_path"
+    echo "类型: $project_type"
+    echo ""
+
+    # 询问确认
+    if [[ "$auto_confirm" == false ]]; then
+        read -p "确认开始迁移? (y/n): " confirm
+        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+            echo "❌ 迁移已取消"
+            exit 0
+        fi
+    fi
+
+    echo ""
+    echo "🚀 开始执行迁移流程..."
+    echo ""
+
+    # 执行迁移工作流
+    run_migration_workflow "$session_dir"
+
+    echo ""
+    echo "🎉 迁移完成！"
+    echo "==============="
+    echo "会话ID: $(basename "$session_dir")"
+    echo "备份位置: $backup_dir/"
+    echo "可以通过以下命令恢复: $0 --resume --session-id $(basename "$session_dir")"
+}
+
+# 如果脚本被直接执行，调用主函数
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

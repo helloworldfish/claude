@@ -1,0 +1,24 @@
+{
+  "session_id": "",
+  "status": "created",
+  "progress": 0,
+  "current_step": "",
+  "steps_completed": [],
+  "steps_pending": [],
+  "files_processed": [],
+  "files_remaining": [],
+  "metrics": {
+    "start_time": null,
+    "last_update": null,
+    "files_processed_count": 0,
+    "errors_count": 0,
+    "warnings_count": 0
+  },
+  "context": {
+    "project_path": "",
+    "project_type": "",
+    "detected_issues": [],
+    "migration_plan": {},
+    "current_operation": null
+  }
+}

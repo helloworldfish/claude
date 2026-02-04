@@ -1,0 +1,31 @@
+# Default Migration Configuration
+migration:
+  goals: []
+  strategy: "balanced"
+  safety_level: "high"
+  parallel_execution: false
+  incremental_support: true
+
+project:
+  auto_detect: true
+  type: "auto"
+
+validation:
+  compile: true
+  test: true
+  lint: true
+  security_scan: true
+
+notifications:
+  status_updates: true
+  email: ""
+  webhook: ""
+
+backup:
+  enabled: true
+  location: ""
+
+performance:
+  max_files_per_batch: 100
+  max_memory_usage: "2GB"
+  timeout_seconds: 3600

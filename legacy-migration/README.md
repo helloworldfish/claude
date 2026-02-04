@@ -90,9 +90,6 @@ claude plugin install legacy-migration@local-marketplace
 ## 📚 文档资源
 
 - **[快速开始指南](./QUICK_START_GUIDE.md)** - 详细的快速开始教程和示例
-- **[系统架构评审](./AGENT_SYSTEM_REVIEW.md)** - AI Agent系统深度分析和优化建议
-- **[分享材料](./SHARED_MATERIAL.md)** - 完整的功能介绍和使用场景
-- **[演示材料](./PRESENTATION.md)** - 适合演示的PPT格式材料
 
 ## 安装
 
